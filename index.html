@@ -3,53 +3,86 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Online Whiteboard</title>
+  <title>Advanced Whiteboard</title>
   <style>
     html, body {
       margin: 0;
       height: 100%;
       overflow: hidden;
-      background: #fff;
+      font-family: sans-serif;
+      background: #f0f0f0;
     }
-    canvas {
-      touch-action: none;
-      background: #ffffff;
-      display: block;
-    }
-    #clearBtn {
+    #toolbar {
       position: absolute;
       top: 10px;
       left: 10px;
-      padding: 10px 15px;
-      background: #000;
-      color: #fff;
-      border: none;
-      border-radius: 5px;
       z-index: 10;
-      font-size: 16px;
+      display: flex;
+      gap: 10px;
+      background: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    canvas {
+      touch-action: none;
+      display: block;
+      background: #ffffff;
+    }
+    input[type="range"] {
+      width: 100px;
+    }
+    #imageInput {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <button id="clearBtn">Clear</button>
+
+  <div id="toolbar">
+    <label>Color:
+      <input type="color" id="colorPicker" value="#000000">
+    </label>
+    <label>Size:
+      <input type="range" id="sizePicker" min="1" max="20" value="3">
+    </label>
+    <button id="clearBtn">Clear</button>
+    <button onclick="document.getElementById('imageInput').click()">Upload Image/PDF</button>
+    <input type="file" id="imageInput" accept="image/*,application/pdf">
+  </div>
+
   <canvas id="board"></canvas>
 
   <script>
     const canvas = document.getElementById('board');
     const ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('colorPicker');
+    const sizePicker = document.getElementById('sizePicker');
     let drawing = false;
 
     function resizeCanvas() {
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      ctx.putImageData(img, 0, 0);
     }
 
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
+        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top
+      };
+    }
+
     function startDraw(e) {
       drawing = true;
       ctx.beginPath();
+      const pos = getPos(e);
+      ctx.moveTo(pos.x, pos.y);
       draw(e);
     }
 
@@ -60,15 +93,11 @@
 
     function draw(e) {
       if (!drawing) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-      const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-
-      ctx.lineWidth = 3;
+      const pos = getPos(e);
+      ctx.lineWidth = sizePicker.value;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#000000';
-      ctx.lineTo(x, y);
+      ctx.strokeStyle = colorPicker.value;
+      ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
     }
 
@@ -83,6 +112,40 @@
     document.getElementById('clearBtn').addEventListener('click', () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
+
+    // Image/PDF Upload
+    document.getElementById('imageInput').addEventListener('change', async function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const fileURL = URL.createObjectURL(file);
+
+      if (file.type === "application/pdf") {
+        const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+        const pdf = await pdfjsLib.getDocument(fileURL).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.5 });
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        const renderContext = {
+          canvasContext: ctx,
+          viewport: viewport
+        };
+        await page.render(renderContext).promise;
+
+      } else if (file.type.startsWith("image/")) {
+        const img = new Image();
+        img.onload = function () {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = fileURL;
+      }
+    });
   </script>
+
 </body>
 </html>
