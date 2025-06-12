@@ -89,6 +89,10 @@
     };
   }
 
+  <input type="file" id="fileInput" accept="image/*,.pdf" />
+<button id="clearCanvasBtn">Clear Canvas</button>
+
+
   function startDraw(e) {
     e.preventDefault();
     drawing = true;
@@ -127,6 +131,37 @@
     ctx.closePath();
   }
 
+const fileInput = document.getElementById('fileInput');
+const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  if (file.type.startsWith('image/')) {
+    reader.onload = function(event) {
+      const img = new Image();
+      img.onload = () => {
+        // Clear canvas before drawing image or keep existing content if you want
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Draw image at top-left corner or scale as needed
+        ctx.drawImage(img, 0, 0, canvas.width, img.height * (canvas.width / img.width));
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  // For PDFs, more complex; ask if you want help with that
+});
+
+clearCanvasBtn.addEventListener('click', () => {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+});
+
+  
   // Mouse Events
   canvas.addEventListener('mousedown', startDraw);
   canvas.addEventListener('mousemove', draw);
@@ -145,6 +180,84 @@
     resizeCanvas();
     ctx.putImageData(imageData, 0, 0);
   });
+
+  <button id="lassoBtn">Lasso Erase</button>
+const lassoBtn = document.getElementById('lassoBtn');
+lassoBtn.addEventListener('click', startLasso);
+
+
+  let lassoPoints = [];
+let lassoActive = false;
+
+function drawLassoLine() {
+  if (lassoPoints.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = 'blue';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+  for (let i = 1; i < lassoPoints.length; i++) {
+    ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function startLasso() {
+  lassoPoints = [];
+  lassoActive = true;
+  alert('Click points on canvas to draw lasso. Double click to finish and erase inside.');
+}
+
+// On canvas click handler for lasso:
+canvas.addEventListener('click', (e) => {
+  if (!lassoActive) return;
+  const pos = getPos(e);
+  lassoPoints.push(pos);
+  redrawCanvas();
+  drawLassoLine();
+});
+
+// On canvas double click to finish lasso:
+canvas.addEventListener('dblclick', (e) => {
+  if (!lassoActive) return;
+  if (lassoPoints.length < 3) {
+    alert('Need at least 3 points to form a polygon');
+    return;
+  }
+  lassoActive = false;
+
+  // Create a path and erase inside polygon
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out'; // erase mode
+
+  ctx.beginPath();
+  ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+  for (let i = 1; i < lassoPoints.length; i++) {
+    ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+  }
+  ctx.closePath();
+  ctx.fill();  // this erases inside polygon
+
+  ctx.restore();
+
+  lassoPoints = [];
+  redrawCanvas();
+});
+
+function redrawCanvas() {
+  // If you have a background image or saved drawing, redraw it here
+  // For now just clear:
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // TODO: redraw your image or strokes here if you saved them
+
+  // If lasso active, draw lasso lines again
+  if (lassoActive) {
+    drawLassoLine();
+  }
+}
+  
 </script>
 
 </body>
