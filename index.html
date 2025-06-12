@@ -10,17 +10,13 @@
       padding: 0;
       height: 100%;
       overflow: hidden;
-    }
-    canvas {
-      display: block;
-      background: #fff;
-      touch-action: none;
+      font-family: sans-serif;
     }
     #toolbar {
-      position: absolute;
+      position: fixed;
       top: 10px;
       left: 10px;
-      z-index: 10;
+      z-index: 20;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
@@ -28,6 +24,21 @@
       padding: 10px;
       border-radius: 8px;
       box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    #canvasContainer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: auto;
+      background: #f0f0f0;
+      z-index: 1;
+    }
+    canvas {
+      background: #fff;
+      display: block;
+      touch-action: none;
     }
     input[type="range"] {
       width: 100px;
@@ -45,15 +56,18 @@
     <button id="eraseToggle">Eraser: OFF</button>
     <button id="clearBtn">Clear</button>
     <button onclick="document.getElementById('imageInput').click()">Upload Image or PDF</button>
+    <button id="removeFileBtn">Remove File</button>
+    <button id="fullscreenBtn">Fullscreen</button>
     <input type="file" id="imageInput" accept="image/*,application/pdf">
     <button id="prevPageBtn" disabled>⬅ Prev Page</button>
     <button id="nextPageBtn" disabled>Next Page ➡</button>
     <span id="pageInfo"></span>
   </div>
 
-  <canvas id="board"></canvas>
+  <div id="canvasContainer">
+    <canvas id="board"></canvas>
+  </div>
 
-  <!-- PDF.js library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <script>
@@ -64,9 +78,12 @@
     const eraseToggle = document.getElementById('eraseToggle');
     const clearBtn = document.getElementById('clearBtn');
     const fileInput = document.getElementById('imageInput');
+    const removeFileBtn = document.getElementById('removeFileBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
     const prevBtn = document.getElementById('prevPageBtn');
     const nextBtn = document.getElementById('nextPageBtn');
     const pageInfo = document.getElementById('pageInfo');
+    const canvasContainer = document.getElementById('canvasContainer');
 
     let drawing = false;
     let erasing = false;
@@ -74,19 +91,24 @@
     let pdfPageNum = 1;
     let pdfScale = 1.5;
 
-    function resizeCanvas() {
+    function resizeCanvasToWindow() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
 
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    window.addEventListener('resize', () => {
+      if (!pdf && !uploadedImage) {
+        resizeCanvasToWindow();
+      }
+    });
+
+    resizeCanvasToWindow();
 
     function getPos(e) {
       const rect = canvas.getBoundingClientRect();
       return {
-        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
-        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top
+        x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left + canvasContainer.scrollLeft,
+        y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top + canvasContainer.scrollTop
       };
     }
 
@@ -129,13 +151,14 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
 
+    let uploadedImage = null;
+
     async function renderPDFPage(num) {
       if (!pdf) return;
       const page = await pdf.getPage(num);
       const viewport = page.getViewport({ scale: pdfScale });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-
       const renderContext = {
         canvasContext: ctx,
         viewport: viewport
@@ -170,6 +193,7 @@
 
       if (file.type === 'application/pdf') {
         pdf = await pdfjsLib.getDocument(fileURL).promise;
+        uploadedImage = null;
         pdfPageNum = 1;
         renderPDFPage(pdfPageNum);
       } else if (file.type.startsWith('image/')) {
@@ -177,14 +201,34 @@
         img.onload = function () {
           canvas.width = img.width;
           canvas.height = img.height;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0);
+          uploadedImage = img;
+          pdf = null;
+          pageInfo.textContent = '';
+          prevBtn.disabled = true;
+          nextBtn.disabled = true;
         };
         img.src = fileURL;
       }
+    });
 
+    removeFileBtn.addEventListener('click', () => {
+      uploadedImage = null;
+      pdf = null;
+      pageInfo.textContent = '';
       prevBtn.disabled = true;
       nextBtn.disabled = true;
-      pageInfo.textContent = '';
+      resizeCanvasToWindow();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
     });
   </script>
 </body>
