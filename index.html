@@ -3,261 +3,351 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Scrollable Whiteboard Fix</title>
+<title>Integrated Whiteboard with Drawing, Highlighting, Lasso Erase, and Upload</title>
 <style>
-  html, body {
-    height: 100%;
-    margin: 0;
-    overflow: hidden; /* no page scroll, only canvas container scroll */
-  }
-  #canvasContainer {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    overflow: auto;
-    background: #eee;
-    z-index: 1;
-  }
-  canvas {
-    display: block;
-    background: white;
-    width: 100%;
-    height: 3000px; /* Large height for scrolling */
-    touch-action: none;
+  body, html {
+    margin: 0; padding: 0; height: 100%;
+    display: flex; flex-direction: column;
+    font-family: Arial, sans-serif;
+    background: #f0f0f0;
   }
   #toolbar {
-    position: fixed;
-    top: 10px; left: 10px;
-    background: #fff;
-    padding: 10px;
-    border: 1px solid #ccc;
-    z-index: 10;
+    background: #ddd;
+    padding: 8px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  button {
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  #whiteboard-container {
+    flex: 1;
+    overflow: auto;
+    background: white;
+    border-top: 2px solid #aaa;
+    position: relative;
+  }
+  #whiteboard {
+    background: white;
+    display: block;
+    margin: 0 auto;
+    /* Large canvas size */
+    width: 1200px;
+    height: 900px;
+    touch-action: none; /* prevent scrolling on touch devices while drawing */
+    cursor: crosshair;
+  }
+  input[type="file"] {
+    display: inline-block;
   }
 </style>
 </head>
 <body>
 
 <div id="toolbar">
-  Tool:
-  <select id="toolPicker">
-    <option value="pen">Pen</option>
-    <option value="highlight">Highlighter</option>
-    <option value="eraser">Eraser</option>
-  </select>
-  Color: <input type="color" id="colorPicker" value="#ff0000" />
-  Size: <input type="range" id="sizePicker" min="1" max="50" value="5" />
+  <button id="drawBtn">Draw</button>
+  <button id="highlightBtn">Highlight</button>
+  <button id="lassoBtn">Lasso Erase</button>
+  <button id="clearBtn">Clear</button>
+  <input type="file" id="fileInput" accept="image/*" />
 </div>
 
-<div id="canvasContainer">
-  <canvas id="canvas"></canvas>
+<div id="whiteboard-container">
+  <canvas id="whiteboard" width="1200" height="900"></canvas>
 </div>
 
 <script>
-  const canvas = document.getElementById('canvas');
+(() => {
+  const canvas = document.getElementById('whiteboard');
   const ctx = canvas.getContext('2d');
-  const container = document.getElementById('canvasContainer');
-  const toolPicker = document.getElementById('toolPicker');
-  const colorPicker = document.getElementById('colorPicker');
-  const sizePicker = document.getElementById('sizePicker');
 
-  // Set canvas width and height to actual pixels (not CSS)
-  function resizeCanvas() {
-    canvas.width = container.clientWidth;
-    canvas.height = 3000; // large height for scrolling/drawing
-  }
-  resizeCanvas();
+  // Toolbar buttons and input
+  const drawBtn = document.getElementById('drawBtn');
+  const highlightBtn = document.getElementById('highlightBtn');
+  const lassoBtn = document.getElementById('lassoBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const fileInput = document.getElementById('fileInput');
 
+  // State
+  let mode = 'draw'; // draw, highlight, lasso
   let drawing = false;
-  let tool = 'pen';
+  let lastPos = null;
+  let highlightAlpha = 0.3;
 
-  toolPicker.addEventListener('change', e => {
-    tool = e.target.value;
-  });
+  // Store strokes for undo/redraw
+  // Each stroke: {mode: 'draw'|'highlight', points: [{x,y}], color, width}
+  const strokes = [];
 
-  function getPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    let clientX, clientY;
-    if (e.touches && e.touches.length) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
+  // Store image drawn on canvas, if any
+  let backgroundImage = null;
+
+  // Lasso variables
+  let lassoActive = false;
+  let lassoPoints = [];
+
+  // Set initial tool styles
+  function setToolStyles() {
+    if (mode === 'draw') {
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 1.0;
+      canvas.style.cursor = 'crosshair';
+    } else if (mode === 'highlight') {
+      ctx.strokeStyle = 'yellow';
+      ctx.lineWidth = 20;
+      ctx.globalAlpha = highlightAlpha;
+      canvas.style.cursor = 'crosshair';
+    } else if (mode === 'lasso') {
+      ctx.strokeStyle = 'blue';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 1.0;
+      canvas.style.cursor = 'crosshair';
     }
+  }
+
+  // Get mouse position relative to canvas
+  function getPos(evt) {
+    const rect = canvas.getBoundingClientRect();
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
+      x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+      y: (evt.clientY - rect.top) * (canvas.height / rect.height)
     };
   }
 
-  <input type="file" id="fileInput" accept="image/*,.pdf" />
-<button id="clearCanvasBtn">Clear Canvas</button>
+  // Redraw entire canvas: background + all strokes + lasso if active
+  function redrawCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Draw background image if any
+    if (backgroundImage) {
+      ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+    }
 
-  function startDraw(e) {
-    e.preventDefault();
-    drawing = true;
-    const pos = getPos(e);
+    // Draw all strokes
+    for (const stroke of strokes) {
+      ctx.save();
+      if (stroke.mode === 'highlight') {
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.width;
+        ctx.globalAlpha = highlightAlpha;
+      } else {
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.width;
+        ctx.globalAlpha = 1.0;
+      }
+      ctx.beginPath();
+      for (let i = 0; i < stroke.points.length; i++) {
+        const p = stroke.points[i];
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = parseInt(sizePicker.value, 10);
-
-    if (tool === 'pen') {
-      ctx.globalAlpha = 1.0;
-      ctx.strokeStyle = colorPicker.value;
-    } else if (tool === 'highlight') {
-      ctx.globalAlpha = 0.3; // transparent all along
-      ctx.strokeStyle = colorPicker.value;
-    } else if (tool === 'eraser') {
-      ctx.globalAlpha = 1.0;
-      ctx.strokeStyle = '#FFFFFF';
+    // Draw lasso polygon if active
+    if (lassoActive && lassoPoints.length > 0) {
+      ctx.save();
+      ctx.strokeStyle = 'blue';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+      for (let i = 1; i < lassoPoints.length; i++) {
+        ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
-  function draw(e) {
+  // Undo last stroke (optional feature you can add)
+  function undo() {
+    if (strokes.length > 0) {
+      strokes.pop();
+      redrawCanvas();
+    }
+  }
+
+  // Clear all
+  function clearCanvas() {
+    strokes.length = 0;
+    backgroundImage = null;
+    redrawCanvas();
+  }
+
+  // Add a stroke to strokes array and redraw
+  function addStroke(points) {
+    let color = '#000000';
+    let width = 2;
+    if (mode === 'highlight') {
+      color = 'yellow';
+      width = 20;
+    }
+    strokes.push({ mode, points, color, width });
+    redrawCanvas();
+  }
+
+  // Mouse event handlers
+  canvas.addEventListener('mousedown', (e) => {
+    if (mode === 'lasso') return; // disable drawing on lasso mode
+
+    drawing = true;
+    lastPos = getPos(e);
+    // Start a new stroke with initial point
+    currentStroke = [lastPos];
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
     if (!drawing) return;
-    e.preventDefault();
+    if (mode === 'lasso') return;
+
     const pos = getPos(e);
+    currentStroke.push(pos);
+
+    ctx.save();
+    setToolStyles();
+    ctx.beginPath();
+    ctx.moveTo(lastPos.x, lastPos.y);
     ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
-  }
+    ctx.restore();
 
-  function stopDraw(e) {
+    lastPos = pos;
+  });
+
+  canvas.addEventListener('mouseup', (e) => {
     if (!drawing) return;
-    e.preventDefault();
+    if (mode === 'lasso') return;
+
     drawing = false;
+    addStroke(currentStroke);
+    currentStroke = null;
+  });
+
+  // Lasso polygon point adding
+  canvas.addEventListener('click', (e) => {
+    if (!lassoActive) return;
+    const pos = getPos(e);
+    lassoPoints.push(pos);
+    redrawCanvas();
+  });
+
+  // Double click to finish lasso polygon and erase inside
+  canvas.addEventListener('dblclick', (e) => {
+    if (!lassoActive) return;
+    if (lassoPoints.length < 3) {
+      alert('Need at least 3 points to finish lasso erase.');
+      return;
+    }
+
+    // Create path for polygon
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
+    for (let i = 1; i < lassoPoints.length; i++) {
+      ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
+    }
     ctx.closePath();
-  }
 
-const fileInput = document.getElementById('fileInput');
-const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+    // Set composite to erase inside polygon
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fill();
 
-fileInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+    ctx.restore();
 
-  const reader = new FileReader();
+    // Erase strokes inside polygon roughly by removing any point inside polygon
+    // (simple approximation: remove whole strokes if any point inside polygon)
+    function pointInPolygon(point, vs) {
+      let x = point.x, y = point.y;
+      let inside = false;
+      for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        let xi = vs[i].x, yi = vs[i].y;
+        let xj = vs[j].x, yj = vs[j].y;
 
-  if (file.type.startsWith('image/')) {
-    reader.onload = function(event) {
+        let intersect = ((yi > y) !== (yj > y)) &&
+                        (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    const newStrokes = strokes.filter(stroke => {
+      return !stroke.points.some(p => pointInPolygon(p, lassoPoints));
+    });
+    strokes.length = 0;
+    strokes.push(...newStrokes);
+
+    // Reset lasso
+    lassoActive = false;
+    lassoPoints = [];
+    redrawCanvas();
+  });
+
+  // Toolbar buttons handlers
+  drawBtn.addEventListener('click', () => {
+    mode = 'draw';
+    lassoActive = false;
+    lassoPoints = [];
+    setToolStyles();
+  });
+
+  highlightBtn.addEventListener('click', () => {
+    mode = 'highlight';
+    lassoActive = false;
+    lassoPoints = [];
+    setToolStyles();
+  });
+
+  lassoBtn.addEventListener('click', () => {
+    mode = 'lasso';
+    lassoActive = true;
+    lassoPoints = [];
+    setToolStyles();
+    alert('Lasso mode active. Click to add polygon points, double-click to erase inside.');
+  });
+
+  clearBtn.addEventListener('click', () => {
+    clearCanvas();
+  });
+
+  // File upload handler (images only)
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Only image files are supported for upload right now.');
+      fileInput.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Clear canvas before drawing image or keep existing content if you want
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        // Draw image at top-left corner or scale as needed
-        ctx.drawImage(img, 0, 0, canvas.width, img.height * (canvas.width / img.width));
+        // Save background image and redraw canvas
+        backgroundImage = img;
+        redrawCanvas();
       };
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
-  }
-  
-  // For PDFs, more complex; ask if you want help with that
-});
 
-clearCanvasBtn.addEventListener('click', () => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-});
-
-  
-  // Mouse Events
-  canvas.addEventListener('mousedown', startDraw);
-  canvas.addEventListener('mousemove', draw);
-  canvas.addEventListener('mouseup', stopDraw);
-  canvas.addEventListener('mouseout', stopDraw);
-
-  // Touch Events
-  canvas.addEventListener('touchstart', startDraw);
-  canvas.addEventListener('touchmove', draw);
-  canvas.addEventListener('touchend', stopDraw);
-  canvas.addEventListener('touchcancel', stopDraw);
-
-  // Optional: If window resized, update canvas width (keep height fixed)
-  window.addEventListener('resize', () => {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    resizeCanvas();
-    ctx.putImageData(imageData, 0, 0);
+    // Reset file input so same file can be uploaded again if needed
+    fileInput.value = '';
   });
 
-  <button id="lassoBtn">Lasso Erase</button>
-const lassoBtn = document.getElementById('lassoBtn');
-lassoBtn.addEventListener('click', startLasso);
+  // Initialize default tool style
+  setToolStyles();
 
+  // Variables for current stroke while drawing
+  let currentStroke = null;
 
-  let lassoPoints = [];
-let lassoActive = false;
-
-function drawLassoLine() {
-  if (lassoPoints.length === 0) return;
-  ctx.save();
-  ctx.strokeStyle = 'blue';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
-  for (let i = 1; i < lassoPoints.length; i++) {
-    ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
-  }
-  ctx.stroke();
-  ctx.restore();
-}
-
-function startLasso() {
-  lassoPoints = [];
-  lassoActive = true;
-  alert('Click points on canvas to draw lasso. Double click to finish and erase inside.');
-}
-
-// On canvas click handler for lasso:
-canvas.addEventListener('click', (e) => {
-  if (!lassoActive) return;
-  const pos = getPos(e);
-  lassoPoints.push(pos);
-  redrawCanvas();
-  drawLassoLine();
-});
-
-// On canvas double click to finish lasso:
-canvas.addEventListener('dblclick', (e) => {
-  if (!lassoActive) return;
-  if (lassoPoints.length < 3) {
-    alert('Need at least 3 points to form a polygon');
-    return;
-  }
-  lassoActive = false;
-
-  // Create a path and erase inside polygon
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out'; // erase mode
-
-  ctx.beginPath();
-  ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
-  for (let i = 1; i < lassoPoints.length; i++) {
-    ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
-  }
-  ctx.closePath();
-  ctx.fill();  // this erases inside polygon
-
-  ctx.restore();
-
-  lassoPoints = [];
-  redrawCanvas();
-});
-
-function redrawCanvas() {
-  // If you have a background image or saved drawing, redraw it here
-  // For now just clear:
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // TODO: redraw your image or strokes here if you saved them
-
-  // If lasso active, draw lasso lines again
-  if (lassoActive) {
-    drawLassoLine();
-  }
-}
-  
+})();
 </script>
 
 </body>
