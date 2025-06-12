@@ -32,7 +32,7 @@
     }
     #canvas-container {
       position: absolute;
-      top: 108px; /* height of 3 toolbar rows */
+      top: 108px;
       bottom: 0;
       width: 100%;
       overflow: auto;
@@ -101,7 +101,6 @@
           <button data-shape="circle">⚪</button>
           <button data-shape="triangle">🔺</button>
           <button data-shape="line">➖</button>
-          <!-- Add more shapes if needed -->
         </div>
       </div>
     </div>
@@ -125,12 +124,54 @@
   </div>
 
   <script>
-    // Initialization and interaction logic goes here...
-    // This includes canvas drawing, highlighter transparency (use globalAlpha),
-    // loading images/PDFs, fixing scroll-based drawing issues, shape editing, etc.
+    // Enable basic canvas drawing to test functionality
+    const canvas = document.getElementById('whiteboard');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
 
-    // Because this is a full feature set, it's best implemented in modular JS.
-    // I will finish and organize all that JS functionality next if you'd like me to.
+    canvas.addEventListener('mousedown', (e) => {
+      drawing = true;
+      ctx.beginPath();
+      ctx.moveTo(e.offsetX, e.offsetY);
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!drawing) return;
+      ctx.lineTo(e.offsetX, e.offsetY);
+      ctx.stroke();
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      drawing = false;
+    });
+
+    // Fullscreen toggle
+    document.getElementById('fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    // File upload test
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('removeFile').addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
   </script>
 </body>
 </html>
