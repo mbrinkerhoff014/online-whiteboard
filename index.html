@@ -85,7 +85,8 @@ select#shapeTool option {
 }
 
 #canvasContainer {
-  flex: 1;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
   overflow: auto;
   background: #f0f0f0;
   z-index: 1;
@@ -95,6 +96,8 @@ canvas {
   background: #fff;
   display: block;
   touch-action: none;
+  width: 100%;
+  height: 3000px; /* Allow large drawing area */
 }
 
 input[type="range"] {
@@ -201,32 +204,48 @@ input[type="range"] {
   shapeTool.onchange = () => shape = shapeTool.value;
 
   function resizeCanvas(width, height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
+  canvas.width = width;
+  canvas.height = Math.max(height, 3000); // ensure tall canvas
+}
 
   function getPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left + canvasContainer.scrollLeft,
-      y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top + canvasContainer.scrollTop
-    };
-  }
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  };
+}
+
 
   function startDraw(e) {
-    drawing = true;
-    const pos = getPos(e);
-    startX = pos.x;
-    startY = pos.y;
+  drawing = true;
+  const pos = getPos(e);
+  startX = pos.x;
+  startY = pos.y;
 
-    if (tool === 'lasso') {
-      lassoPath = [pos];
-    } else if (shape === 'none') {
-      ctx.beginPath();
-      ctx.moveTo(pos.x, pos.y);
-      draw(e);
-    }
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+  ctx.lineCap = 'round';
+  ctx.lineWidth = sizePicker.value;
+
+  if (tool === 'pen') {
+    ctx.globalAlpha = 1.0;
+    ctx.strokeStyle = colorPicker.value;
+  } else if (tool === 'highlight') {
+    ctx.globalAlpha = 0.3; // consistent transparency throughout
+    ctx.strokeStyle = colorPicker.value;
+  } else if (tool === 'eraser') {
+    ctx.globalAlpha = 1.0;
+    ctx.strokeStyle = '#FFFFFF';
   }
+
+  if (tool === 'lasso') {
+    lassoPath = [pos];
+  }
+}
+
 
   function endDraw(e) {
     if (!drawing) return;
@@ -300,13 +319,17 @@ input[type="range"] {
   }
 
   function draw(e) {
-    if (!drawing || shape !== 'none') return;
-    const pos = getPos(e);
+  if (!drawing || shape !== 'none') return;
+  const pos = getPos(e);
 
-    if (tool === 'lasso') {
-      lassoPath.push(pos);
-      return;
-    }
+  if (tool === 'lasso') {
+    lassoPath.push(pos);
+    return;
+  }
+
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+}
 
     ctx.lineWidth = sizePicker.value;
     ctx.lineCap = 'round';
