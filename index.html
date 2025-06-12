@@ -3,14 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Advanced Whiteboard</title>
+  <title>Online Whiteboard</title>
   <style>
-    html, body {
+    body, html {
       margin: 0;
+      padding: 0;
       height: 100%;
       overflow: hidden;
-      font-family: sans-serif;
-      background: #f0f0f0;
+    }
+    canvas {
+      display: block;
+      background: #fff;
+      touch-action: none;
     }
     #toolbar {
       position: absolute;
@@ -18,16 +22,12 @@
       left: 10px;
       z-index: 10;
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
-      background: #fff;
+      background: #ffffffcc;
       padding: 10px;
       border-radius: 8px;
       box-shadow: 0 0 5px rgba(0,0,0,0.2);
-    }
-    canvas {
-      touch-action: none;
-      display: block;
-      background: #ffffff;
     }
     input[type="range"] {
       width: 100px;
@@ -40,31 +40,43 @@
 <body>
 
   <div id="toolbar">
-    <label>Color:
-      <input type="color" id="colorPicker" value="#000000">
-    </label>
-    <label>Size:
-      <input type="range" id="sizePicker" min="1" max="20" value="3">
-    </label>
+    <label>Color: <input type="color" id="colorPicker" value="#000000"></label>
+    <label>Size: <input type="range" id="sizePicker" min="1" max="20" value="3"></label>
+    <button id="eraseToggle">Eraser: OFF</button>
     <button id="clearBtn">Clear</button>
-    <button onclick="document.getElementById('imageInput').click()">Upload Image/PDF</button>
+    <button onclick="document.getElementById('imageInput').click()">Upload Image or PDF</button>
     <input type="file" id="imageInput" accept="image/*,application/pdf">
+    <button id="prevPageBtn" disabled>⬅ Prev Page</button>
+    <button id="nextPageBtn" disabled>Next Page ➡</button>
+    <span id="pageInfo"></span>
   </div>
 
   <canvas id="board"></canvas>
+
+  <!-- PDF.js library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <script>
     const canvas = document.getElementById('board');
     const ctx = canvas.getContext('2d');
     const colorPicker = document.getElementById('colorPicker');
     const sizePicker = document.getElementById('sizePicker');
+    const eraseToggle = document.getElementById('eraseToggle');
+    const clearBtn = document.getElementById('clearBtn');
+    const fileInput = document.getElementById('imageInput');
+    const prevBtn = document.getElementById('prevPageBtn');
+    const nextBtn = document.getElementById('nextPageBtn');
+    const pageInfo = document.getElementById('pageInfo');
+
     let drawing = false;
+    let erasing = false;
+    let pdf = null;
+    let pdfPageNum = 1;
+    let pdfScale = 1.5;
 
     function resizeCanvas() {
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      ctx.putImageData(img, 0, 0);
     }
 
     window.addEventListener('resize', resizeCanvas);
@@ -96,7 +108,7 @@
       const pos = getPos(e);
       ctx.lineWidth = sizePicker.value;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = colorPicker.value;
+      ctx.strokeStyle = erasing ? '#FFFFFF' : colorPicker.value;
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
     }
@@ -104,38 +116,63 @@
     canvas.addEventListener('mousedown', startDraw);
     canvas.addEventListener('mouseup', endDraw);
     canvas.addEventListener('mousemove', draw);
-
     canvas.addEventListener('touchstart', startDraw);
     canvas.addEventListener('touchend', endDraw);
     canvas.addEventListener('touchmove', draw);
 
-    document.getElementById('clearBtn').addEventListener('click', () => {
+    eraseToggle.addEventListener('click', () => {
+      erasing = !erasing;
+      eraseToggle.textContent = `Eraser: ${erasing ? 'ON' : 'OFF'}`;
+    });
+
+    clearBtn.addEventListener('click', () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
 
-    // Image/PDF Upload
-    document.getElementById('imageInput').addEventListener('change', async function(event) {
+    async function renderPDFPage(num) {
+      if (!pdf) return;
+      const page = await pdf.getPage(num);
+      const viewport = page.getViewport({ scale: pdfScale });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: viewport
+      };
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      await page.render(renderContext).promise;
+
+      pageInfo.textContent = `Page ${pdfPageNum} of ${pdf.numPages}`;
+      prevBtn.disabled = num <= 1;
+      nextBtn.disabled = num >= pdf.numPages;
+    }
+
+    prevBtn.addEventListener('click', () => {
+      if (pdfPageNum > 1) {
+        pdfPageNum--;
+        renderPDFPage(pdfPageNum);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (pdfPageNum < pdf.numPages) {
+        pdfPageNum++;
+        renderPDFPage(pdfPageNum);
+      }
+    });
+
+    fileInput.addEventListener('change', async function (event) {
       const file = event.target.files[0];
       if (!file) return;
 
       const fileURL = URL.createObjectURL(file);
 
-      if (file.type === "application/pdf") {
-        const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-        const pdf = await pdfjsLib.getDocument(fileURL).promise;
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 1.5 });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        const renderContext = {
-          canvasContext: ctx,
-          viewport: viewport
-        };
-        await page.render(renderContext).promise;
-
-      } else if (file.type.startsWith("image/")) {
+      if (file.type === 'application/pdf') {
+        pdf = await pdfjsLib.getDocument(fileURL).promise;
+        pdfPageNum = 1;
+        renderPDFPage(pdfPageNum);
+      } else if (file.type.startsWith('image/')) {
         const img = new Image();
         img.onload = function () {
           canvas.width = img.width;
@@ -144,8 +181,11 @@
         };
         img.src = fileURL;
       }
+
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
+      pageInfo.textContent = '';
     });
   </script>
-
 </body>
 </html>
