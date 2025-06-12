@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Online Whiteboard</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Online Whiteboard</title>
   <style>
     body, html {
       margin: 0;
@@ -16,7 +16,7 @@
       position: fixed;
       top: 10px;
       left: 10px;
-      z-index: 20;
+      z-index: 100;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
@@ -24,6 +24,16 @@
       padding: 10px;
       border-radius: 8px;
       box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    #fullscreenBtn {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 100;
+      background: transparent;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
     }
     #canvasContainer {
       position: absolute;
@@ -53,16 +63,30 @@
   <div id="toolbar">
     <label>Color: <input type="color" id="colorPicker" value="#000000"></label>
     <label>Size: <input type="range" id="sizePicker" min="1" max="20" value="3"></label>
-    <button id="eraseToggle">Eraser: OFF</button>
+    <button id="penBtn">Pen</button>
+    <button id="highlightBtn">Highlighter</button>
+    <button id="eraseBtn">Eraser</button>
+    <button id="lassoEraseBtn">Lasso Erase</button>
+    <button id="undoBtn">Undo</button>
+    <button id="redoBtn">Redo</button>
+    <select id="shapeTool">
+      <option value="none">Free Draw</option>
+      <option value="rect-stroke">Rectangle (Stroke)</option>
+      <option value="rect-fill">Rectangle (Fill)</option>
+      <option value="circle-stroke">Circle (Stroke)</option>
+      <option value="circle-fill">Circle (Fill)</option>
+      <option value="line">Line</option>
+    </select>
     <button id="clearBtn">Clear</button>
     <button onclick="document.getElementById('imageInput').click()">Upload Image or PDF</button>
     <button id="removeFileBtn">Remove File</button>
-    <button id="fullscreenBtn">Fullscreen</button>
     <input type="file" id="imageInput" accept="image/*,application/pdf">
     <button id="prevPageBtn" disabled>⬅ Prev Page</button>
     <button id="nextPageBtn" disabled>Next Page ➡</button>
     <span id="pageInfo"></span>
   </div>
+
+  <button id="fullscreenBtn" title="Fullscreen">⛶</button>
 
   <div id="canvasContainer">
     <canvas id="board"></canvas>
@@ -75,7 +99,6 @@
     const ctx = canvas.getContext('2d');
     const colorPicker = document.getElementById('colorPicker');
     const sizePicker = document.getElementById('sizePicker');
-    const eraseToggle = document.getElementById('eraseToggle');
     const clearBtn = document.getElementById('clearBtn');
     const fileInput = document.getElementById('imageInput');
     const removeFileBtn = document.getElementById('removeFileBtn');
@@ -84,25 +107,49 @@
     const nextBtn = document.getElementById('nextPageBtn');
     const pageInfo = document.getElementById('pageInfo');
     const canvasContainer = document.getElementById('canvasContainer');
+    const penBtn = document.getElementById('penBtn');
+    const highlightBtn = document.getElementById('highlightBtn');
+    const eraseBtn = document.getElementById('eraseBtn');
+    const lassoEraseBtn = document.getElementById('lassoEraseBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    const shapeTool = document.getElementById('shapeTool');
 
+    let tool = 'pen';
+    let shape = 'none';
     let drawing = false;
-    let erasing = false;
     let pdf = null;
     let pdfPageNum = 1;
     let pdfScale = 1.5;
+    let lassoPath = [];
+    let startX = 0, startY = 0;
 
-    function resizeCanvasToWindow() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+    let undoStack = [];
+    let redoStack = [];
+
+    function saveState() {
+      undoStack.push(canvas.toDataURL());
+      redoStack = [];
     }
 
-    window.addEventListener('resize', () => {
-      if (!pdf && !uploadedImage) {
-        resizeCanvasToWindow();
-      }
-    });
+    function restoreState(stackFrom, stackTo) {
+      if (stackFrom.length === 0) return;
+      stackTo.push(canvas.toDataURL());
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      img.src = stackFrom.pop();
+    }
 
-    resizeCanvasToWindow();
+    undoBtn.onclick = () => restoreState(undoStack, redoStack);
+    redoBtn.onclick = () => restoreState(redoStack, undoStack);
+
+    shapeTool.onchange = () => shape = shapeTool.value;
+
+    function resizeCanvas(width, height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
 
     function getPos(e) {
       const rect = canvas.getBoundingClientRect();
@@ -114,23 +161,79 @@
 
     function startDraw(e) {
       drawing = true;
-      ctx.beginPath();
       const pos = getPos(e);
-      ctx.moveTo(pos.x, pos.y);
-      draw(e);
+      startX = pos.x;
+      startY = pos.y;
+
+      if (tool === 'lasso') {
+        lassoPath = [pos];
+      } else if (shape === 'none') {
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
+        draw(e);
+      }
     }
 
-    function endDraw() {
+    function endDraw(e) {
+      if (!drawing) return;
       drawing = false;
-      ctx.closePath();
+      const pos = getPos(e);
+
+      if (tool === 'lasso') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(lassoPath[0].x, lassoPath[0].y);
+        for (let p of lassoPath) ctx.lineTo(p.x, p.y);
+        ctx.closePath();
+        ctx.clip();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      } else if (shape !== 'none') {
+        ctx.beginPath();
+        ctx.lineWidth = sizePicker.value;
+        ctx.strokeStyle = ctx.fillStyle = colorPicker.value;
+        if (shape.startsWith('rect')) {
+          const w = pos.x - startX;
+          const h = pos.y - startY;
+          shape.endsWith('fill') ? ctx.fillRect(startX, startY, w, h) : ctx.strokeRect(startX, startY, w, h);
+        } else if (shape.startsWith('circle')) {
+          const r = Math.sqrt(Math.pow(pos.x - startX, 2) + Math.pow(pos.y - startY, 2));
+          ctx.arc(startX, startY, r, 0, 2 * Math.PI);
+          shape.endsWith('fill') ? ctx.fill() : ctx.stroke();
+        } else if (shape === 'line') {
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(pos.x, pos.y);
+          ctx.stroke();
+        }
+        ctx.closePath();
+      }
+
+      saveState();
     }
 
     function draw(e) {
-      if (!drawing) return;
+      if (!drawing || shape !== 'none') return;
       const pos = getPos(e);
+
+      if (tool === 'lasso') {
+        lassoPath.push(pos);
+        return;
+      }
+
       ctx.lineWidth = sizePicker.value;
       ctx.lineCap = 'round';
-      ctx.strokeStyle = erasing ? '#FFFFFF' : colorPicker.value;
+
+      if (tool === 'pen') {
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = colorPicker.value;
+      } else if (tool === 'highlight') {
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = colorPicker.value;
+      } else if (tool === 'eraser') {
+        ctx.globalAlpha = 1.0;
+        ctx.strokeStyle = '#FFFFFF';
+      }
+
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
     }
@@ -142,94 +245,72 @@
     canvas.addEventListener('touchend', endDraw);
     canvas.addEventListener('touchmove', draw);
 
-    eraseToggle.addEventListener('click', () => {
-      erasing = !erasing;
-      eraseToggle.textContent = `Eraser: ${erasing ? 'ON' : 'OFF'}`;
-    });
+    penBtn.onclick = () => tool = 'pen';
+    highlightBtn.onclick = () => tool = 'highlight';
+    eraseBtn.onclick = () => tool = 'eraser';
+    lassoEraseBtn.onclick = () => tool = 'lasso';
 
-    clearBtn.addEventListener('click', () => {
+    clearBtn.onclick = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-    });
-
-    let uploadedImage = null;
+      saveState();
+    };
 
     async function renderPDFPage(num) {
-      if (!pdf) return;
       const page = await pdf.getPage(num);
       const viewport = page.getViewport({ scale: pdfScale });
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const renderContext = {
-        canvasContext: ctx,
-        viewport: viewport
-      };
+      resizeCanvas(viewport.width, viewport.height);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      await page.render(renderContext).promise;
+      await page.render({ canvasContext: ctx, viewport }).promise;
 
       pageInfo.textContent = `Page ${pdfPageNum} of ${pdf.numPages}`;
       prevBtn.disabled = num <= 1;
       nextBtn.disabled = num >= pdf.numPages;
     }
 
-    prevBtn.addEventListener('click', () => {
-      if (pdfPageNum > 1) {
-        pdfPageNum--;
-        renderPDFPage(pdfPageNum);
-      }
-    });
+    prevBtn.onclick = () => { if (pdfPageNum > 1) renderPDFPage(--pdfPageNum); };
+    nextBtn.onclick = () => { if (pdfPageNum < pdf.numPages) renderPDFPage(++pdfPageNum); };
 
-    nextBtn.addEventListener('click', () => {
-      if (pdfPageNum < pdf.numPages) {
-        pdfPageNum++;
-        renderPDFPage(pdfPageNum);
-      }
-    });
-
-    fileInput.addEventListener('change', async function (event) {
-      const file = event.target.files[0];
+    fileInput.addEventListener('change', async e => {
+      const file = e.target.files[0];
       if (!file) return;
-
-      const fileURL = URL.createObjectURL(file);
+      const url = URL.createObjectURL(file);
 
       if (file.type === 'application/pdf') {
-        pdf = await pdfjsLib.getDocument(fileURL).promise;
-        uploadedImage = null;
-        pdfPageNum = 1;
-        renderPDFPage(pdfPageNum);
-      } else if (file.type.startsWith('image/')) {
+        pdf = await pdfjsLib.getDocument(url).promise;
+        renderPDFPage(pdfPageNum = 1);
+      } else {
         const img = new Image();
-        img.onload = function () {
-          canvas.width = img.width;
-          canvas.height = img.height;
+        img.onload = () => {
+          resizeCanvas(img.width, img.height);
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0);
-          uploadedImage = img;
-          pdf = null;
-          pageInfo.textContent = '';
-          prevBtn.disabled = true;
-          nextBtn.disabled = true;
         };
-        img.src = fileURL;
+        img.src = url;
+        pdf = null;
+        pageInfo.textContent = '';
+        prevBtn.disabled = nextBtn.disabled = true;
       }
     });
 
-    removeFileBtn.addEventListener('click', () => {
-      uploadedImage = null;
+    removeFileBtn.onclick = () => {
       pdf = null;
-      pageInfo.textContent = '';
-      prevBtn.disabled = true;
-      nextBtn.disabled = true;
-      resizeCanvasToWindow();
+      resizeCanvas(window.innerWidth, window.innerHeight);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pageInfo.textContent = '';
+      prevBtn.disabled = nextBtn.disabled = true;
+    };
+
+    fullscreenBtn.onclick = () => {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    };
+
+    window.addEventListener('resize', () => {
+      if (!pdf) resizeCanvas(window.innerWidth, window.innerHeight);
     });
 
-    fullscreenBtn.addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
-      } else {
-        document.exitFullscreen();
-      }
-    });
+    resizeCanvas(window.innerWidth, window.innerHeight);
+    saveState();
   </script>
 </body>
 </html>
