@@ -1,177 +1,413 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Interactive Whiteboard</title>
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
-    #toolbar {
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0;
-      width: 100%;
-      background: #f0f0f0;
-      z-index: 10;
-    }
-    .toolbar-row {
-      display: flex;
-      align-items: center;
-      padding: 4px;
-      gap: 6px;
-    }
-    .toolbar-row:first-child {
-      justify-content: space-between;
-    }
-    #canvas-container {
-      position: absolute;
-      top: 108px;
-      bottom: 0;
-      width: 100%;
-      overflow: auto;
-    }
-    canvas {
-      display: block;
-    }
-    .icon-button {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 18px;
-    }
-    .dropdown {
-      position: relative;
-    }
-    .dropdown-content {
-      display: none;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      background-color: white;
-      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-      z-index: 5;
-    }
-    .dropdown:hover .dropdown-content {
-      display: block;
-    }
-    .dropdown-content button {
-      width: 100%;
-      padding: 4px;
-      text-align: left;
-    }
-    #shape-toolbar {
-      position: fixed;
-      bottom: 10px;
-      left: 10px;
-      background: white;
-      border: 1px solid #ccc;
-      padding: 10px;
-      display: none;
-      z-index: 20;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Advanced Online Whiteboard</title>
+<style>
+  body, html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+#toolbar {
+  background: #ffffffcc;
+  border-radius: 8px;
+  box-shadow: 0 0 5px rgba(0,0,0,0.2);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  user-select: none;
+  transition: max-height 0.3s ease;
+  overflow: hidden;
+  max-height: 1000px; /* Enough height by default */
+}
+
+#toolbar.collapsed {
+  max-height: 40px;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolbar-row.top {
+  justify-content: flex-start;
+}
+
+.toolbar-row.top .fullscreen-btn {
+  margin-left: auto;
+}
+
+button {
+  cursor: pointer;
+  background: #eee;
+  border: 1px solid #ccc;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+button:active {
+  background: #ddd;
+}
+
+#fullscreenBtn {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+}
+
+#collapseBtn {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+}
+
+select#shapeTool {
+  font-size: 0;
+  width: 120px;
+  height: 32px;
+}
+
+select#shapeTool option {
+  font-size: 16px !important;
+}
+
+#canvasContainer {
+  flex: 1;
+  overflow: auto;
+  background: #f0f0f0;
+  z-index: 1;
+}
+
+canvas {
+  background: #fff;
+  display: block;
+  touch-action: none;
+}
+
+input[type="range"] {
+  width: 100px;
+}
+
+#imageInput {
+  display: none;
+}
+</style>
 </head>
 <body>
-  <div id="toolbar">
-    <div class="toolbar-row">
-      <div>
-        <button id="undo" class="icon-button">↶</button>
-        <button id="redo" class="icon-button">↷</button>
-      </div>
-      <button id="fullscreen" class="icon-button" style="margin-left:auto;">⛶</button>
-    </div>
-    <div class="toolbar-row">
-      <input type="color" id="colorPicker" />
-      <input type="range" id="penSize" min="1" max="20" value="2" />
-      <button id="pen">✏️</button>
-      <button id="highlighter">🖍️</button>
-      <button id="eraser">🩹</button>
-      <button id="lassoEraser">🔲</button>
-      <div class="dropdown">
-        <button>⬛</button>
-        <div class="dropdown-content">
-          <button data-shape="rectangle">⬛</button>
-          <button data-shape="circle">⚪</button>
-          <button data-shape="triangle">🔺</button>
-          <button data-shape="line">➖</button>
-        </div>
-      </div>
-    </div>
-    <div class="toolbar-row">
-      <input type="file" id="fileInput" accept="image/*,application/pdf" />
-      <button id="removeFile">Remove File</button>
-      <button id="prevPage">Previous Page</button>
-      <button id="nextPage">Next Page</button>
-    </div>
+
+<div id="toolbar">
+  <div class="toolbar-row top">
+    <button id="undoBtn" title="Undo" aria-label="Undo">↶</button>
+    <button id="redoBtn" title="Redo" aria-label="Redo">↷</button>
+    <button id="fullscreenBtn" class="fullscreen-btn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
   </div>
-
-  <div id="canvas-container">
-    <canvas id="whiteboard" width="3000" height="4000"></canvas>
+  <div class="toolbar-row middle">
+    <label>Color: <input type="color" id="colorPicker" value="#000000"></label>
+    <label>Size: <input type="range" id="sizePicker" min="1" max="20" value="3"></label>
+    <button id="penBtn" title="Pen">✏️</button>
+    <button id="highlightBtn" title="Highlighter">🖍️</button>
+    <button id="eraseBtn" title="Eraser">🧽</button>
+    <button id="lassoEraseBtn" title="Lasso Eraser">⭕</button>
+    <select id="shapeTool" title="Shape Tool" aria-label="Shape Tool">
+      <option value="none" selected>✏️ Free Draw</option>
+      <option value="rect-stroke">⬛ Rectangle Outline</option>
+      <option value="rect-fill">🟥 Rectangle Fill</option>
+      <option value="circle-stroke">⚪ Circle Outline</option>
+      <option value="circle-fill">🔵 Circle Fill</option>
+      <option value="line">➖ Line</option>
+    </select>
+    <button id="clearBtn" title="Clear">🗑️</button>
   </div>
-
-  <div id="shape-toolbar">
-    <label>Fill Color: <input type="color" id="shapeFill" /></label>
-    <label>Stroke Color: <input type="color" id="shapeStroke" /></label>
-    <label>Size: <input type="range" id="shapeSize" min="10" max="500" /></label>
-    <label>Rotate: <input type="range" id="shapeRotate" min="0" max="360" /></label>
+  <div class="toolbar-row bottom">
+    <button onclick="document.getElementById('imageInput').click()" title="Upload Image or PDF">📁 Upload</button>
+    <button id="removeFileBtn" title="Remove Uploaded File">❌ Remove File</button>
+    <button id="prevPageBtn" disabled title="Previous PDF Page">⬅ Prev</button>
+    <button id="nextPageBtn" disabled title="Next PDF Page">Next ➡</button>
+    <span id="pageInfo" aria-live="polite" style="margin-left: 10px;"></span>
+    <input type="file" id="imageInput" accept="image/*,application/pdf" />
   </div>
+</div>
 
-  <script>
-    // Enable basic canvas drawing to test functionality
-    const canvas = document.getElementById('whiteboard');
-    const ctx = canvas.getContext('2d');
-    let drawing = false;
+<div id="canvasContainer">
+  <canvas id="board"></canvas>
+</div>
 
-    canvas.addEventListener('mousedown', (e) => {
-      drawing = true;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<script>
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const colorPicker = document.getElementById('colorPicker');
+  const sizePicker = document.getElementById('sizePicker');
+  const clearBtn = document.getElementById('clearBtn');
+  const fileInput = document.getElementById('imageInput');
+  const removeFileBtn = document.getElementById('removeFileBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const prevBtn = document.getElementById('prevPageBtn');
+  const nextBtn = document.getElementById('nextPageBtn');
+  const pageInfo = document.getElementById('pageInfo');
+  const canvasContainer = document.getElementById('canvasContainer');
+  const penBtn = document.getElementById('penBtn');
+  const highlightBtn = document.getElementById('highlightBtn');
+  const eraseBtn = document.getElementById('eraseBtn');
+  const lassoEraseBtn = document.getElementById('lassoEraseBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const redoBtn = document.getElementById('redoBtn');
+  const shapeTool = document.getElementById('shapeTool');
+
+  let tool = 'pen';
+  let shape = 'none';
+  let drawing = false;
+  let pdf = null;
+  let pdfPageNum = 1;
+  let pdfScale = 1.5;
+  let lassoPath = [];
+  let startX = 0, startY = 0;
+
+  let undoStack = [];
+  let redoStack = [];
+
+  function saveState() {
+    undoStack.push(canvas.toDataURL());
+    if (undoStack.length > 50) undoStack.shift(); // Limit history
+    redoStack = [];
+  }
+
+  function restoreState(stackFrom, stackTo) {
+    if (stackFrom.length === 0) return;
+    stackTo.push(canvas.toDataURL());
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    img.src = stackFrom.pop();
+  }
+
+  undoBtn.onclick = () => restoreState(undoStack, redoStack);
+  redoBtn.onclick = () => restoreState(redoStack, undoStack);
+
+  shapeTool.onchange = () => shape = shapeTool.value;
+
+  function resizeCanvas(width, height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left + canvasContainer.scrollLeft,
+      y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top + canvasContainer.scrollTop
+    };
+  }
+
+  function startDraw(e) {
+    drawing = true;
+    const pos = getPos(e);
+    startX = pos.x;
+    startY = pos.y;
+
+    if (tool === 'lasso') {
+      lassoPath = [pos];
+    } else if (shape === 'none') {
       ctx.beginPath();
-      ctx.moveTo(e.offsetX, e.offsetY);
-    });
+      ctx.moveTo(pos.x, pos.y);
+      draw(e);
+    }
+  }
 
-    canvas.addEventListener('mousemove', (e) => {
-      if (!drawing) return;
-      ctx.lineTo(e.offsetX, e.offsetY);
-      ctx.stroke();
-    });
+  function endDraw(e) {
+    if (!drawing) return;
+    drawing = false;
+    const pos = getPos(e);
 
-    canvas.addEventListener('mouseup', () => {
-      drawing = false;
-    });
-
-    // Fullscreen toggle
-    document.getElementById('fullscreen').addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
-      } else {
-        document.exitFullscreen();
+    if (tool === 'lasso') {
+      // Fix: Erase inside polygon lasso
+      // Create a Path2D from lassoPath
+      let path = new Path2D();
+      path.moveTo(lassoPath[0].x, lassoPath[0].y);
+      for (let i = 1; i < lassoPath.length; i++) {
+        path.lineTo(lassoPath[i].x, lassoPath[i].y);
       }
-    });
+      path.closePath();
 
-    // File upload test
-    document.getElementById('fileInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        const img = new Image();
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-        };
-        img.src = evt.target.result;
+      // Get image data
+      let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let data = imgData.data;
+
+      // Loop through every pixel and erase if inside path
+      // We'll test a grid of points to optimize
+      // Using isPointInPath with canvas context for speed
+
+      // Create an offscreen canvas to test point-in-path
+      const offscreen = document.createElement('canvas');
+      offscreen.width = canvas.width;
+      offscreen.height = canvas.height;
+      const offCtx = offscreen.getContext('2d');
+      offCtx.beginPath();
+      offCtx.moveTo(lassoPath[0].x, lassoPath[0].y);
+      for (let i = 1; i < lassoPath.length; i++) {
+        offCtx.lineTo(lassoPath[i].x, lassoPath[i].y);
+      }
+      offCtx.closePath();
+
+      // Erase pixels inside lasso polygon
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          if (offCtx.isPointInPath(x, y)) {
+            const idx = (y * canvas.width + x) * 4;
+            data[idx + 3] = 0; // Alpha = 0 (erase)
+          }
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      saveState();
+      lassoPath = [];
+    } else if (shape !== 'none') {
+      ctx.beginPath();
+      ctx.lineWidth = sizePicker.value;
+      ctx.strokeStyle = ctx.fillStyle = colorPicker.value;
+      if (shape.startsWith('rect')) {
+        const w = pos.x - startX;
+        const h = pos.y - startY;
+        shape.endsWith('fill') ? ctx.fillRect(startX, startY, w, h) : ctx.strokeRect(startX, startY, w, h);
+      } else if (shape.startsWith('circle')) {
+        const r = Math.sqrt(Math.pow(pos.x - startX, 2) + Math.pow(pos.y - startY, 2));
+        ctx.arc(startX, startY, r, 0, 2 * Math.PI);
+        shape.endsWith('fill') ? ctx.fill() : ctx.stroke();
+      } else if (shape === 'line') {
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+      }
+      ctx.closePath();
+
+      saveState();
+    }
+  }
+
+  function draw(e) {
+    if (!drawing || shape !== 'none') return;
+    const pos = getPos(e);
+
+    if (tool === 'lasso') {
+      lassoPath.push(pos);
+      return;
+    }
+
+    ctx.lineWidth = sizePicker.value;
+    ctx.lineCap = 'round';
+
+    if (tool === 'pen') {
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = colorPicker.value;
+    } else if (tool === 'highlight') {
+      ctx.globalAlpha = 0.1;
+      ctx.strokeStyle = colorPicker.value;
+    } else if (tool === 'eraser') {
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = '#FFFFFF';
+    }
+
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+  }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('touchstart', startDraw);
+  canvas.addEventListener('touchend', endDraw);
+  canvas.addEventListener('touchmove', draw);
+
+  penBtn.onclick = () => { tool = 'pen'; shape = 'none'; shapeTool.value = 'none'; };
+  highlightBtn.onclick = () => { tool = 'highlight'; shape = 'none'; shapeTool.value = 'none'; };
+  eraseBtn.onclick = () => { tool = 'eraser'; shape = 'none'; shapeTool.value = 'none'; };
+  lassoEraseBtn.onclick = () => { tool = 'lasso'; shape = 'none'; shapeTool.value = 'none'; };
+
+  clearBtn.onclick = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    saveState();
+  };
+
+  async function renderPDFPage(num) {
+    const page = await pdf.getPage(num);
+    const viewport = page.getViewport({ scale: pdfScale });
+    resizeCanvas(viewport.width, viewport.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    pageInfo.textContent = `Page ${pdfPageNum} of ${pdf.numPages}`;
+    prevBtn.disabled = num <= 1;
+    nextBtn.disabled = num >= pdf.numPages;
+  }
+
+  prevBtn.onclick = () => { if (pdfPageNum > 1) renderPDFPage(--pdfPageNum); };
+  nextBtn.onclick = () => { if (pdfPageNum < pdf.numPages) renderPDFPage(++pdfPageNum); };
+
+  fileInput.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+
+    if (file.type === 'application/pdf') {
+      pdf = await pdfjsLib.getDocument(url).promise;
+      renderPDFPage(pdfPageNum = 1);
+    } else {
+      const img = new Image();
+      img.onload = () => {
+        resizeCanvas(img.width, img.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
       };
-      reader.readAsDataURL(file);
-    });
+      img.src = url;
+      pdf = null;
+      pageInfo.textContent = '';
+      prevBtn.disabled = nextBtn.disabled = true;
+    }
+  });
 
-    document.getElementById('removeFile').addEventListener('click', () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    });
-  </script>
+  removeFileBtn.onclick = () => {
+    pdf = null;
+    resizeCanvas(window.innerWidth, window.innerHeight);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pageInfo.textContent = '';
+    prevBtn.disabled = nextBtn.disabled = true;
+  };
+
+  fullscreenBtn.onclick = () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  };
+
+const collapseBtn = document.getElementById('collapseBtn');
+collapseBtn.onclick = () => {
+  const toolbar = document.getElementById('toolbar');
+  toolbar.classList.toggle('collapsed');
+  collapseBtn.textContent = toolbar.classList.contains('collapsed') ? '⬇️' : '⬆️';
+};
+
+  
+  window.addEventListener('resize', () => {
+    if (!pdf) resizeCanvas(window.innerWidth, window.innerHeight);
+  });
+
+  resizeCanvas(window.innerWidth, window.innerHeight);
+  saveState();
+</script>
+
 </body>
 </html>
