@@ -210,13 +210,14 @@
 
   // Mouse event handlers
   canvas.addEventListener('mousedown', (e) => {
-    if (mode === 'lasso') return; // disable drawing on lasso mode
+  if (mode === 'lasso') return;
 
-    drawing = true;
-    lastPos = getPos(e);
-    // Start a new stroke with initial point
-    currentStroke = [lastPos];
-  });
+  drawing = true;
+  lastPos = getPos(e);
+  currentStroke = [lastPos];
+  setToolStyles(); // Set tool styles when stroke begins
+});
+
 
   canvas.addEventListener('mousemove', (e) => {
     if (!drawing) return;
@@ -226,12 +227,13 @@
     currentStroke.push(pos);
 
     ctx.save();
-    setToolStyles();
-    ctx.beginPath();
-    ctx.moveTo(lastPos.x, lastPos.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    ctx.restore();
+setToolStyles(); // Apply selected color before each stroke
+ctx.beginPath();
+ctx.moveTo(lastPos.x, lastPos.y);
+ctx.lineTo(pos.x, pos.y);
+ctx.stroke();
+ctx.restore();
+
 
     lastPos = pos;
   });
@@ -362,7 +364,7 @@
   setToolStyles();
 
   // Variables for current stroke while drawing
-  let currentStroke = null;
+  let currentStroke = [];
 
 })();
 </script>
