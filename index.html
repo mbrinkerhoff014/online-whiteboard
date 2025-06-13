@@ -23,6 +23,14 @@
     font-size: 14px;
     cursor: pointer;
   }
+
+  input[type="color"] {
+  height: 30px;
+  width: 40px;
+  border: none;
+  cursor: pointer;
+}
+
   #whiteboard-container {
     flex: 1;
     overflow: auto;
@@ -53,6 +61,8 @@
   <button id="lassoBtn">Lasso Erase</button>
   <button id="clearBtn">Clear</button>
   <input type="file" id="fileInput" accept="image/*" />
+  <label>Draw Color: <input type="color" id="drawColor" value="#000000"></label>
+<label>Highlight Color: <input type="color" id="highlightColor" value="#ffff00"></label>
 </div>
 
 <div id="whiteboard-container">
@@ -89,23 +99,27 @@
   let lassoPoints = [];
 
   // Set initial tool styles
-  function setToolStyles() {
-    if (mode === 'draw') {
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 1.0;
-      canvas.style.cursor = 'crosshair';
-    } else if (mode === 'highlight') {
-      ctx.strokeStyle = 'yellow';
-      ctx.lineWidth = 20;
-      ctx.globalAlpha = highlightAlpha;
-      canvas.style.cursor = 'crosshair';
-    } else if (mode === 'lasso') {
-      ctx.strokeStyle = 'blue';
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 1.0;
-      canvas.style.cursor = 'crosshair';
-    }
+    function setToolStyles() {
+  const drawColor = document.getElementById('drawColor').value;
+  const highlightColor = document.getElementById('highlightColor').value;
+
+  if (mode === 'draw') {
+    ctx.strokeStyle = drawColor;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 1.0;
+    canvas.style.cursor = 'crosshair';
+  } else if (mode === 'highlight') {
+    ctx.strokeStyle = highlightColor;
+    ctx.lineWidth = 20;
+    ctx.globalAlpha = highlightAlpha;
+    canvas.style.cursor = 'crosshair';
+  } else if (mode === 'lasso') {
+    ctx.strokeStyle = 'blue';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 1.0;
+    canvas.style.cursor = 'crosshair';
+  }
+}
   }
 
   // Get mouse position relative to canvas
@@ -181,15 +195,18 @@
 
   // Add a stroke to strokes array and redraw
   function addStroke(points) {
-    let color = '#000000';
-    let width = 2;
-    if (mode === 'highlight') {
-      color = 'yellow';
-      width = 20;
-    }
-    strokes.push({ mode, points, color, width });
-    redrawCanvas();
+  let color = document.getElementById('drawColor').value;
+  let width = 2;
+
+  if (mode === 'highlight') {
+    color = document.getElementById('highlightColor').value;
+    width = 20;
   }
+
+  strokes.push({ mode, points, color, width });
+  redrawCanvas();
+}
+
 
   // Mouse event handlers
   canvas.addEventListener('mousedown', (e) => {
