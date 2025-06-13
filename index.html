@@ -31,6 +31,7 @@
     canvas {
       background: white;
       display: block;
+      touch-action: none;
     }
     .icon {
       font-size: 18px;
@@ -82,6 +83,8 @@
         ctx.globalAlpha = s.mode === 'highlight' ? highlightAlpha : 1;
         ctx.strokeStyle = s.color;
         ctx.lineWidth = s.size;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
         ctx.beginPath();
         for (let i = 0; i < s.points.length; i++) {
           const p = s.points[i];
@@ -95,23 +98,28 @@
 
     function getPos(e) {
       const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-      return { x, y };
+      const x = (e.clientX || e.touches[0].clientX) - rect.left;
+      const y = (e.clientY || e.touches[0].clientY) - rect.top;
+      return {
+        x: x * (canvas.width / rect.width),
+        y: y * (canvas.height / rect.height)
+      };
     }
 
-    canvas.addEventListener('mousedown', e => {
+    function startDrawing(e) {
       if (mode === 'lasso') return;
       drawing = true;
       lastPos = getPos(e);
       currentStroke = { mode, color, size, points: [lastPos] };
-    });
+    }
 
-    canvas.addEventListener('mousemove', e => {
+    function draw(e) {
       if (!drawing || mode === 'lasso') return;
       const pos = getPos(e);
       currentStroke.points.push(pos);
       ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.strokeStyle = mode === 'highlight' ? 'yellow' : color;
       ctx.lineWidth = size;
       ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
@@ -121,14 +129,21 @@
       ctx.stroke();
       ctx.restore();
       lastPos = pos;
-    });
+    }
 
-    canvas.addEventListener('mouseup', () => {
+    function endDrawing() {
       if (!drawing || mode === 'lasso') return;
       strokes.push(currentStroke);
       currentStroke = null;
       drawing = false;
-    });
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', endDrawing);
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); startDrawing(e); });
+    canvas.addEventListener('touchmove', e => { e.preventDefault(); draw(e); });
+    canvas.addEventListener('touchend', e => { e.preventDefault(); endDrawing(); });
 
     canvas.addEventListener('click', e => {
       if (!lassoActive) return;
