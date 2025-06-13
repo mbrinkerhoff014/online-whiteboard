@@ -49,6 +49,8 @@
     <input type="color" id="colorPicker" value="#000000" />
     <input type="range" id="sizePicker" min="1" max="50" value="2" />
     <input type="file" id="fileInput" accept="image/*,.pdf" />
+    <button id="prevPage">⬅️</button>
+    <button id="nextPage">➡️</button>
   </div>
 
   <div id="canvas-container">
@@ -72,6 +74,9 @@
     let lassoActive = false;
     let backgroundImage = null;
 
+    let pdfDoc = null;
+    let currentPage = 1;
+
     document.getElementById('colorPicker').addEventListener('change', e => color = e.target.value);
     document.getElementById('sizePicker').addEventListener('input', e => size = e.target.value);
 
@@ -83,9 +88,9 @@
         ctx.globalAlpha = s.mode === 'highlight' ? highlightAlpha : 1;
         ctx.strokeStyle = s.color;
         ctx.lineWidth = s.size;
+        ctx.beginPath();
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.beginPath();
         for (let i = 0; i < s.points.length; i++) {
           const p = s.points[i];
           if (i === 0) ctx.moveTo(p.x, p.y);
@@ -98,12 +103,9 @@
 
     function getPos(e) {
       const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX || e.touches[0].clientX) - rect.left;
-      const y = (e.clientY || e.touches[0].clientY) - rect.top;
-      return {
-        x: x * (canvas.width / rect.width),
-        y: y * (canvas.height / rect.height)
-      };
+      const x = ((e.clientX || e.touches?.[0].clientX) - rect.left) * (canvas.width / rect.width);
+      const y = ((e.clientY || e.touches?.[0].clientY) - rect.top) * (canvas.height / rect.height);
+      return { x, y };
     }
 
     function startDrawing(e) {
@@ -118,10 +120,10 @@
       const pos = getPos(e);
       currentStroke.points.push(pos);
       ctx.save();
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
       ctx.strokeStyle = mode === 'highlight' ? 'yellow' : color;
       ctx.lineWidth = size;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
       ctx.beginPath();
       ctx.moveTo(lastPos.x, lastPos.y);
@@ -131,7 +133,7 @@
       lastPos = pos;
     }
 
-    function endDrawing() {
+    function stopDrawing() {
       if (!drawing || mode === 'lasso') return;
       strokes.push(currentStroke);
       currentStroke = null;
@@ -140,10 +142,11 @@
 
     canvas.addEventListener('mousedown', startDrawing);
     canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', endDrawing);
+    canvas.addEventListener('mouseup', stopDrawing);
+
     canvas.addEventListener('touchstart', e => { e.preventDefault(); startDrawing(e); });
     canvas.addEventListener('touchmove', e => { e.preventDefault(); draw(e); });
-    canvas.addEventListener('touchend', e => { e.preventDefault(); endDrawing(); });
+    canvas.addEventListener('touchend', stopDrawing);
 
     canvas.addEventListener('click', e => {
       if (!lassoActive) return;
@@ -208,19 +211,9 @@
         reader.onload = function () {
           const typedarray = new Uint8Array(this.result);
           pdfjsLib.getDocument(typedarray).promise.then(pdf => {
-            pdf.getPage(1).then(page => {
-              const viewport = page.getViewport({ scale: 1.5 });
-              const tempCanvas = document.createElement('canvas');
-              const tempCtx = tempCanvas.getContext('2d');
-              tempCanvas.width = viewport.width;
-              tempCanvas.height = viewport.height;
-              const renderContext = { canvasContext: tempCtx, viewport: viewport };
-              page.render(renderContext).promise.then(() => {
-                backgroundImage = new Image();
-                backgroundImage.onload = () => redraw();
-                backgroundImage.src = tempCanvas.toDataURL();
-              });
-            });
+            pdfDoc = pdf;
+            currentPage = 1;
+            renderPDFPage(currentPage);
           });
         };
         reader.readAsArrayBuffer(file);
@@ -233,6 +226,36 @@
         reader.readAsDataURL(file);
       }
     });
+
+    function renderPDFPage(pageNum) {
+      pdfDoc.getPage(pageNum).then(page => {
+        const viewport = page.getViewport({ scale: 1.5 });
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+        const renderContext = { canvasContext: tempCtx, viewport: viewport };
+        page.render(renderContext).promise.then(() => {
+          backgroundImage = new Image();
+          backgroundImage.onload = () => redraw();
+          backgroundImage.src = tempCanvas.toDataURL();
+        });
+      });
+    }
+
+    document.getElementById('prevPage').onclick = () => {
+      if (pdfDoc && currentPage > 1) {
+        currentPage--;
+        renderPDFPage(currentPage);
+      }
+    };
+
+    document.getElementById('nextPage').onclick = () => {
+      if (pdfDoc && currentPage < pdfDoc.numPages) {
+        currentPage++;
+        renderPDFPage(currentPage);
+      }
+    };
 
     redraw();
   </script>
