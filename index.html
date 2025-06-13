@@ -124,12 +124,16 @@
 
   // Get mouse position relative to canvas
   function getPos(evt) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (evt.clientX - rect.left) * (canvas.width / rect.width),
-      y: (evt.clientY - rect.top) * (canvas.height / rect.height)
-    };
-  }
+  const rect = canvas.getBoundingClientRect();
+  const clientX = evt.clientX || (evt.touches && evt.touches[0].clientX);
+  const clientY = evt.clientY || (evt.touches && evt.touches[0].clientY);
+
+  return {
+    x: (clientX - rect.left) * (canvas.width / rect.width),
+    y: (clientY - rect.top) * (canvas.height / rect.height)
+  };
+}
+
 
   // Redraw entire canvas: background + all strokes + lasso if active
   function redrawCanvas() {
@@ -209,43 +213,69 @@
 
 
   // Mouse event handlers
-  canvas.addEventListener('mousedown', (e) => {
+ function handleStart(pos) {
   if (mode === 'lasso') return;
-
   drawing = true;
-  lastPos = getPos(e);
+  lastPos = pos;
   currentStroke = [lastPos];
-  setToolStyles(); // Set tool styles when stroke begins
+  setToolStyles();
+}
+
+function handleMove(pos) {
+  if (!drawing || mode === 'lasso') return;
+
+  currentStroke.push(pos);
+
+  ctx.save();
+  setToolStyles();
+  ctx.beginPath();
+  ctx.moveTo(lastPos.x, lastPos.y);
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+  ctx.restore();
+
+  lastPos = pos;
+}
+
+function handleEnd() {
+  if (!drawing || mode === 'lasso') return;
+  drawing = false;
+  addStroke(currentStroke);
+  currentStroke = [];
+}
+
+// Mouse events
+canvas.addEventListener('mousedown', (e) => {
+  handleStart(getPos(e));
+});
+canvas.addEventListener('mousemove', (e) => {
+  handleMove(getPos(e));
+});
+canvas.addEventListener('mouseup', () => {
+  handleEnd();
+});
+canvas.addEventListener('mouseleave', () => {
+  handleEnd(); // end if user moves cursor off canvas
 });
 
+// Touch events
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault(); // prevent scrolling
+  if (e.touches.length > 0) {
+    handleStart(getPos(e.touches[0]));
+  }
+});
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault(); // prevent scrolling
+  if (e.touches.length > 0) {
+    handleMove(getPos(e.touches[0]));
+  }
+});
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault(); // prevent scrolling
+  handleEnd();
+});
 
-  canvas.addEventListener('mousemove', (e) => {
-    if (!drawing) return;
-    if (mode === 'lasso') return;
-
-    const pos = getPos(e);
-    currentStroke.push(pos);
-
-    ctx.save();
-setToolStyles(); // Apply selected color before each stroke
-ctx.beginPath();
-ctx.moveTo(lastPos.x, lastPos.y);
-ctx.lineTo(pos.x, pos.y);
-ctx.stroke();
-ctx.restore();
-
-
-    lastPos = pos;
-  });
-
-  canvas.addEventListener('mouseup', (e) => {
-    if (!drawing) return;
-    if (mode === 'lasso') return;
-
-    drawing = false;
-    addStroke(currentStroke);
-    currentStroke = null;
-  });
 
   // Lasso polygon point adding
   canvas.addEventListener('click', (e) => {
