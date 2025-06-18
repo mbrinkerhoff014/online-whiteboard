@@ -45,12 +45,13 @@
   <div id="toolbar">
     <button id="drawBtn">✏️</button>
     <button id="highlightBtn">🖍️</button>
-    <button id="lassoBtn">⭕</button>
+    <button id="eraseBtn">🧽</button>
+    <button id="clearBtn">🗑️</button>
     <button id="undoBtn">↩️</button>
     <button id="redoBtn">↪️</button>
     <input type="color" id="colorPicker" value="#000000" />
     <input type="range" id="sizePicker" min="1" max="50" value="2" />
-    <input type="file" id="fileInput" accept="image/*,.pdf" />
+    <input type="file" id="fileInput" accept="image/*,.pdf" multiple />
     <button id="fullscreenBtn">⛶</button>
   </div>
 
@@ -71,8 +72,6 @@
     let highlightAlpha = 0.3;
     let color = document.getElementById('colorPicker').value;
     let size = document.getElementById('sizePicker').value;
-    let lassoPoints = [];
-    let lassoActive = false;
     let backgroundImage = null;
     let pdfDoc = null;
     let currentPage = 1;
@@ -84,6 +83,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (backgroundImage) ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
       for (const s of strokes) {
+        if (s.mode === 'erase') continue;
         ctx.save();
         ctx.globalAlpha = s.mode === 'highlight' ? highlightAlpha : 1;
         ctx.strokeStyle = s.color;
@@ -111,31 +111,43 @@
     }
 
     function startStroke(pos) {
-      if (mode === 'lasso') return;
       drawing = true;
       lastPos = pos;
       currentStroke = { mode, color, size, points: [lastPos] };
     }
 
     function moveStroke(pos) {
-      if (!drawing || mode === 'lasso') return;
+      if (!drawing) return;
       currentStroke.points.push(pos);
-      ctx.save();
-      ctx.strokeStyle = mode === 'highlight' ? 'yellow' : color;
-      ctx.lineWidth = size;
-      ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
-      ctx.lineJoin = ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(lastPos.x, lastPos.y);
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-      ctx.restore();
+      if (mode === 'erase') {
+        ctx.save();
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+        ctx.lineWidth = size;
+        ctx.lineJoin = ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(lastPos.x, lastPos.y);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.strokeStyle = mode === 'highlight' ? 'yellow' : color;
+        ctx.lineWidth = size;
+        ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
+        ctx.lineJoin = ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(lastPos.x, lastPos.y);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        ctx.restore();
+      }
       lastPos = pos;
     }
 
     function endStroke() {
-      if (!drawing || mode === 'lasso') return;
-      strokes.push(currentStroke);
+      if (!drawing) return;
+      if (mode !== 'erase') strokes.push(currentStroke);
       currentStroke = null;
       drawing = false;
     }
@@ -151,51 +163,10 @@
     }, { passive: false });
     canvas.addEventListener('touchend', endStroke);
 
-    canvas.addEventListener('click', e => {
-      if (!lassoActive) return;
-      const pos = getPos(e);
-      lassoPoints.push(pos);
-      redraw();
-      ctx.save();
-      ctx.setLineDash([5, 5]);
-      ctx.strokeStyle = 'blue';
-      ctx.beginPath();
-      ctx.moveTo(lassoPoints[0].x, lassoPoints[0].y);
-      for (let i = 1; i < lassoPoints.length; i++) {
-        ctx.lineTo(lassoPoints[i].x, lassoPoints[i].y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    canvas.addEventListener('dblclick', () => {
-      if (!lassoActive || lassoPoints.length < 3) return;
-
-      function pointInPolygon(p, vs) {
-        let x = p.x, y = p.y;
-        let inside = false;
-        for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-          let xi = vs[i].x, yi = vs[i].y;
-          let xj = vs[j].x, yj = vs[j].y;
-          let intersect = ((yi > y) !== (yj > y)) &&
-            (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-          if (intersect) inside = !inside;
-        }
-        return inside;
-      }
-
-      const remaining = strokes.filter(s => !s.points.some(p => pointInPolygon(p, lassoPoints)));
-      strokes.length = 0;
-      strokes.push(...remaining);
-      lassoPoints = [];
-      lassoActive = false;
-      redraw();
-    });
-
-    document.getElementById('drawBtn').onclick = () => { mode = 'draw'; lassoActive = false; };
-    document.getElementById('highlightBtn').onclick = () => { mode = 'highlight'; lassoActive = false; };
-    document.getElementById('lassoBtn').onclick = () => { mode = 'lasso'; lassoActive = true; lassoPoints = []; };
+    document.getElementById('drawBtn').onclick = () => { mode = 'draw'; };
+    document.getElementById('highlightBtn').onclick = () => { mode = 'highlight'; };
+    document.getElementById('eraseBtn').onclick = () => { mode = 'erase'; };
+    document.getElementById('clearBtn').onclick = () => { strokes.length = 0; redraw(); };
     document.getElementById('undoBtn').onclick = () => { if (strokes.length) undone.push(strokes.pop()); redraw(); };
     document.getElementById('redoBtn').onclick = () => { if (undone.length) strokes.push(undone.pop()); redraw(); };
     document.getElementById('fullscreenBtn').onclick = () => {
@@ -207,28 +178,31 @@
     };
 
     document.getElementById('fileInput').addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
+      const files = e.target.files;
+      if (!files.length) return;
 
-      if (file.type === 'application/pdf') {
-        reader.onload = function () {
-          const typedarray = new Uint8Array(this.result);
-          pdfjsLib.getDocument(typedarray).promise.then(pdf => {
-            pdfDoc = pdf;
-            currentPage = 1;
-            renderPDFPage(currentPage);
-          });
-        };
-        reader.readAsArrayBuffer(file);
-      } else {
-        reader.onload = function (event) {
-          backgroundImage = new Image();
-          backgroundImage.onload = () => redraw();
-          backgroundImage.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-      }
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+
+        if (file.type === 'application/pdf') {
+          reader.onload = function () {
+            const typedarray = new Uint8Array(this.result);
+            pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+              pdfDoc = pdf;
+              currentPage = 1;
+              renderPDFPage(currentPage);
+            });
+          };
+          reader.readAsArrayBuffer(file);
+        } else {
+          reader.onload = function (event) {
+            backgroundImage = new Image();
+            backgroundImage.onload = () => redraw();
+            backgroundImage.src = event.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
     });
 
     function renderPDFPage(pageNum) {
