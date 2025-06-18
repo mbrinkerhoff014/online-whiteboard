@@ -95,16 +95,18 @@
     for (const s of strokes) {
       if (s.mode === 'erase') continue;
       ctx.save();
-ctx.globalCompositeOperation = 'source-over';
-ctx.strokeStyle = s.color;
-ctx.lineWidth = s.size;
-ctx.lineJoin = ctx.lineCap = 'round';
-ctx.globalAlpha = s.mode === 'highlight' ? 0.3 : 1;  // fixed transparency for highlighter
-
-ctx.beginPath();
-...
-ctx.stroke();
-ctx.restore();
+      ctx.globalAlpha = 1;
+ctx.strokeStyle = s.mode === 'highlight' ? 'rgba(255, 255, 0, 0.3)' : s.color;
+      ctx.lineWidth = s.size;
+      ctx.lineJoin = ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < s.points.length; i++) {
+        const p = s.points[i];
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
@@ -127,42 +129,34 @@ ctx.restore();
   function moveStroke(pos) {
     if (!drawing) return;
     currentStroke.points.push(pos);
-   if (mode === 'erase') {
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.strokeStyle = 'rgba(0,0,0,1)';
-  ctx.globalAlpha = 1;
-} else {
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = currentStroke.color;
-  ctx.globalAlpha = mode === 'highlight' ? 0.3 : 1;  // set fixed transparency for highlighter
-}
+    if (mode === 'erase') {
+      // Instead of erasing directly on canvas, remove overlapping strokes
+      const strokes = getStrokes();
+      const radius = size;
+      for (let i = strokes.length - 1; i >= 0; i--) {
+        const stroke = strokes[i];
+        if (stroke.mode === 'erase') continue;
+        for (const p of stroke.points) {
+          const dx = p.x - pos.x;
+          const dy = p.y - pos.y;
+          if (dx * dx + dy * dy <= radius * radius) {
+            strokes.splice(i, 1);
+            break;
+          }
         }
       }
       redraw();
     } else {
       ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = size;
-      ctx.globalAlpha = mode === 'highlight' ? 0.3 : 1;
+      ctx.strokeStyle = mode === 'highlight' ? 'rgba(255, 255, 0, 0.3)' : color;
+ctx.lineWidth = size;
+ctx.globalAlpha = 1;
       ctx.lineJoin = ctx.lineCap = 'round';
-     ctx.beginPath();
-const points = currentStroke.points;
-if (points.length < 3) {
-  const p = points[0];
-  ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2);
-  ctx.fill();
-} else {
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length - 1; i++) {
-    const midX = (points[i].x + points[i + 1].x) / 2;
-    const midY = (points[i].y + points[i + 1].y) / 2;
-    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-  }
-  ctx.stroke();
-}
+      ctx.beginPath();
+      ctx.moveTo(lastPos.x, lastPos.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
       ctx.restore();
-      ctx.lineJoin = 'round';
-ctx.lineCap = 'round';
     }
     lastPos = pos;
   }
