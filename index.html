@@ -132,27 +132,37 @@
     }
 
     function moveStroke(pos) {
-      if (!drawing) return;
-      currentStroke.points.push(pos);
-      ctx.save();
-      if (mode === 'erase') {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.strokeStyle = 'rgba(0,0,0,1)';
-        ctx.globalAlpha = 1;
-      } else {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = currentStroke.color;
-        ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
-      }
-      ctx.lineWidth = size;
-      ctx.lineJoin = ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(lastPos.x, lastPos.y);
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-      ctx.restore();
-      lastPos = pos;
-    }
+  if (!drawing) return;
+  currentStroke.points.push(pos);
+
+  ctx.save();
+
+  if (mode === 'erase') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+    ctx.lineWidth = size;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(lastPos.x, lastPos.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = currentStroke.color;
+    ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
+    ctx.lineWidth = size;
+    ctx.lineJoin = ctx.lineCap = 'round';
+
+    // Draw a continuous path from lastPos to current pos
+    ctx.beginPath();
+    ctx.moveTo(lastPos.x, lastPos.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+  lastPos = pos;
+}
+
 
     function endStroke() {
       if (!drawing) return;
