@@ -96,7 +96,7 @@
       if (s.mode === 'erase') continue;
       ctx.save();
       ctx.globalAlpha = s.mode === 'highlight' ? highlightAlpha : 1;
-      ctx.strokeStyle = s.mode === 'highlight' ? 'yellow' : s.color;
+      ctx.strokeStyle = s.color;
       ctx.lineWidth = s.size;
       ctx.lineJoin = ctx.lineCap = 'round';
       ctx.beginPath();
@@ -148,7 +148,7 @@
       redraw();
     } else {
       ctx.save();
-      ctx.strokeStyle = mode === 'highlight' ? 'yellow' : color;
+      ctx.strokeStyle = color;
       ctx.lineWidth = size;
       ctx.globalAlpha = mode === 'highlight' ? highlightAlpha : 1;
       ctx.lineJoin = ctx.lineCap = 'round';
