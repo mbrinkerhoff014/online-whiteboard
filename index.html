@@ -95,8 +95,8 @@
     for (const s of strokes) {
       if (s.mode === 'erase') continue;
       ctx.save();
-      ctx.globalAlpha = 1;
-ctx.strokeStyle = s.mode === 'highlight' ? 'rgba(255, 255, 0, 0.3)' : s.color;
+ctx.globalAlpha = 1;
+ctx.strokeStyle = s.mode === 'highlight' ? 'rgba(255, 255, 0, 0.2)' : s.color;
       ctx.lineWidth = s.size;
       ctx.lineJoin = ctx.lineCap = 'round';
       ctx.beginPath();
@@ -148,15 +148,15 @@ ctx.strokeStyle = s.mode === 'highlight' ? 'rgba(255, 255, 0, 0.3)' : s.color;
       redraw();
     } else {
       ctx.save();
-      ctx.strokeStyle = mode === 'highlight' ? 'rgba(255, 255, 0, 0.3)' : color;
+ctx.strokeStyle = mode === 'highlight' ? 'rgba(255, 255, 0, 0.2)' : color;
 ctx.lineWidth = size;
+ctx.lineJoin = ctx.lineCap = 'round';
 ctx.globalAlpha = 1;
-      ctx.lineJoin = ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(lastPos.x, lastPos.y);
-      ctx.lineTo(pos.x, pos.y);
-      ctx.stroke();
-      ctx.restore();
+ctx.beginPath();
+ctx.moveTo(lastPos.x, lastPos.y);
+ctx.lineTo(pos.x, pos.y);
+ctx.stroke();
+ctx.restore();
     }
     lastPos = pos;
   }
