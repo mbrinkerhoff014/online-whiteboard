@@ -15,6 +15,7 @@
     }
     #toolbar {
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       padding: 10px;
       background: #f0f0f0;
@@ -22,9 +23,7 @@
       position: relative;
     }
     #fullscreenBtn {
-      position: absolute;
-      right: 10px;
-      top: 10px;
+      margin-left: auto;
       font-size: 18px;
     }
     #toolbar button, #toolbar input[type="color"], #toolbar input[type="range"] {
@@ -86,7 +85,7 @@
         if (s.mode === 'erase') continue;
         ctx.save();
         ctx.globalAlpha = s.mode === 'highlight' ? highlightAlpha : 1;
-        ctx.strokeStyle = s.color;
+        ctx.strokeStyle = s.mode === 'highlight' ? 'yellow' : s.color;
         ctx.lineWidth = s.size;
         ctx.lineJoin = ctx.lineCap = 'round';
         ctx.beginPath();
