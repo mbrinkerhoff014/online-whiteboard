@@ -86,11 +86,12 @@ const highlightAlpha = 0.3; // always use 30% opacity
     return undone[currentPage] = undone[currentPage] || [];
 
     function hexToRgba(hex, alpha) {
-  const bigint = parseInt(hex.slice(1), 16);
+  const bigint = parseInt(hex.replace('#', ''), 16);
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 }
 
   }
@@ -106,7 +107,7 @@ const highlightAlpha = 0.3; // always use 30% opacity
       if (s.mode === 'erase') continue;
       ctx.save();
 ctx.globalAlpha = 1;
-ctx.strokeStyle = s.mode === 'highlight' ? hexToRgba(s.color, highlightAlpha) : s.color;
+ctx.strokeStyle = s.color;
       ctx.lineWidth = s.size;
       ctx.lineJoin = ctx.lineCap = 'round';
       ctx.beginPath();
@@ -133,7 +134,8 @@ ctx.strokeStyle = s.mode === 'highlight' ? hexToRgba(s.color, highlightAlpha) : 
   function startStroke(pos) {
     drawing = true;
     lastPos = pos;
-    currentStroke = { mode, color, size, points: [lastPos] };
+    const strokeColor = mode === 'highlight' ? hexToRgba(color, highlightAlpha) : color;
+currentStroke = { mode, color: strokeColor, size, points: [lastPos] };
   }
 
   function moveStroke(pos) {
@@ -158,7 +160,7 @@ ctx.strokeStyle = s.mode === 'highlight' ? hexToRgba(s.color, highlightAlpha) : 
       redraw();
     } else {
       ctx.save();
-ctx.strokeStyle = mode === 'highlight' ? hexToRgba(color, highlightAlpha) : color;
+ctx.strokeStyle = currentStroke.color;
 ctx.lineWidth = size;
 ctx.lineJoin = ctx.lineCap = 'round';
 ctx.globalAlpha = 1;
