@@ -30,14 +30,20 @@
       cursor: pointer;
     }
     #canvas-container {
-      flex: 1;
-      overflow: auto;
-      position: relative;
-    }
-    canvas {
-      background: white;
-      display: block;
-    }
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  touch-action: pan-y; /* Allow 2-finger vertical scroll on touchscreen */
+}
+
+canvas {
+  background: white;
+  display: block;
+  max-width: 100vw; /* Never exceed screen width */
+  height: auto;     /* Maintain aspect ratio */
+  touch-action: none; /* Still allow drawing with one finger */
+}
+
   </style>
 </head>
 <body>
@@ -72,7 +78,6 @@
   const undone = {};
   let highlightAlpha = 0.3;
   let color = document.getElementById('colorPicker').value;
-const highlightAlpha = 0.3; // always use 30% opacity
   let size = document.getElementById('sizePicker').value;
   let backgroundImage = null;
   let pdfDoc = null;
@@ -84,16 +89,6 @@ const highlightAlpha = 0.3; // always use 30% opacity
 
   function getUndone() {
     return undone[currentPage] = undone[currentPage] || [];
-
-    function hexToRgba(hex, alpha) {
-  const bigint = parseInt(hex.replace('#', ''), 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-}
-
   }
 
   document.getElementById('colorPicker').addEventListener('change', e => color = e.target.value);
@@ -107,7 +102,7 @@ const highlightAlpha = 0.3; // always use 30% opacity
       if (s.mode === 'erase') continue;
       ctx.save();
 ctx.globalAlpha = 1;
-ctx.strokeStyle = s.color;
+ctx.strokeStyle = s.mode === 'highlight' ? 'rgba(255, 255, 0, 0.2)' : s.color;
       ctx.lineWidth = s.size;
       ctx.lineJoin = ctx.lineCap = 'round';
       ctx.beginPath();
@@ -134,8 +129,7 @@ ctx.strokeStyle = s.color;
   function startStroke(pos) {
     drawing = true;
     lastPos = pos;
-    const strokeColor = mode === 'highlight' ? hexToRgba(color, highlightAlpha) : color;
-currentStroke = { mode, color: strokeColor, size, points: [lastPos] };
+    currentStroke = { mode, color, size, points: [lastPos] };
   }
 
   function moveStroke(pos) {
@@ -160,7 +154,7 @@ currentStroke = { mode, color: strokeColor, size, points: [lastPos] };
       redraw();
     } else {
       ctx.save();
-ctx.strokeStyle = currentStroke.color;
+ctx.strokeStyle = mode === 'highlight' ? 'rgba(255, 255, 0, 0.2)' : color;
 ctx.lineWidth = size;
 ctx.lineJoin = ctx.lineCap = 'round';
 ctx.globalAlpha = 1;
