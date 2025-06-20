@@ -107,8 +107,7 @@
     for (const s of strokes) {
       if (s.mode === 'erase') continue;
       ctx.save();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = s.mode === 'highlight' ? hexToRgba(s.color, highlightAlpha) : s.color;
+      ctx.strokeStyle = s.color;
       ctx.lineWidth = s.size;
       ctx.lineJoin = ctx.lineCap = 'round';
       ctx.beginPath();
@@ -135,7 +134,8 @@
   function startStroke(pos) {
     drawing = true;
     lastPos = pos;
-    currentStroke = { mode, color, size, points: [lastPos] };
+    let strokeColor = (mode === 'highlight') ? hexToRgba(color, highlightAlpha) : color;
+currentStroke = { mode, color: strokeColor, size, points: [lastPos] };
   }
 
   function moveStroke(pos) {
@@ -159,7 +159,7 @@
       redraw();
     } else {
       ctx.save();
-      ctx.strokeStyle = mode === 'highlight' ? hexToRgba(color, highlightAlpha) : color;
+      ctx.strokeStyle = currentStroke.color;
       ctx.lineWidth = size;
       ctx.lineJoin = ctx.lineCap = 'round';
       ctx.globalAlpha = 1;
